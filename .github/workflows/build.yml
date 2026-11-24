@@ -30,9 +30,17 @@ jobs:
         run: dotnet run --project tests/CoreTests.csproj -c Release
       - name: Compile and package
         run: bash build.sh
+      - name: Package development source
+        run: git archive --format=zip --output=dist/vs_syntactic_wizardry_0.02-development.zip HEAD
+      - name: Upload development source
+        uses: actions/upload-artifact@v4
+        with:
+          name: vs_syntactic_wizardry_0.02-development
+          path: dist/vs_syntactic_wizardry_0.02-development.zip
+          if-no-files-found: error
       - name: Upload installable mod
         uses: actions/upload-artifact@v4
         with:
-          name: vs_syntactic_wizardry_0.01-mod
-          path: dist/vs_syntactic_wizardry_0.01-mod.zip
+          name: vs_syntactic_wizardry_0.02-mod
+          path: dist/vs_syntactic_wizardry_0.02-mod.zip
           if-no-files-found: error

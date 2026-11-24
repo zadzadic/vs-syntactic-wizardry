@@ -43,7 +43,7 @@ public sealed class DamageDefinition : Definition {
 }
 public sealed class Registry {
  private readonly Dictionary<string,Definition> definitions=new(StringComparer.Ordinal);
- public Registry(){Register(new TargetDefinition());Register(new DamageDefinition());}
+ public Registry(){Register(new TargetDefinition());Register(new SphereDefinition());Register(new BoxDefinition());Register(new CircleDefinition());Register(new ConeDefinition());Register(new TriangleDefinition());Register(new FloatingDefinition());Register(new DamageDefinition());}
  public void Register(Definition d)=>definitions.Add(d.Id,d);
  public bool TryGet(string id,out Definition d)=>definitions.TryGetValue(id,out d!);
  public Definition this[string id]=>definitions[id];
@@ -61,7 +61,7 @@ public sealed class Engine(Registry registry) {
   if(rows[0].Key!=0||rows[0].Any(c=>registry[c.Id].Kind!=ComponentKind.Shape))return "First row must contain Shapes.";
   for(int i=0;i<rows.Length;i++){if(rows[i].Key!=i)return "Rows must be contiguous."; if(rows[i].Any(c=>registry[c.Id].Kind==ComponentKind.Modifier))return "Modifiers are not implemented."; if(rows[i].Select(c=>registry[c.Id].Kind).Distinct().Count()!=1)return "Do not mix Shapes and Effects in a row in this build.";}
   if(registry[rows[^1].First().Id].Kind!=ComponentKind.Effect)return "Last row must contain Effects.";
-  // Bound branching; this milestone implements Target only.
+  // Bound branching to one Shape per row until branching modifiers are implemented.
   if(rows.Any(r=>registry[r.First().Id].Kind==ComponentKind.Shape&&r.Count()!=1))return "One Shape per row in this build.";
   return null;
  }

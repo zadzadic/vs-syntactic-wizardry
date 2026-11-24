@@ -1,1 +1,18 @@
-{"type":"code","modid":"syntacticwizardry","name":"Syntactic Wizardry","authors":["Proxpero"],"description":"Vintage Story spellcasting port, first development milestone.","version":"0.0.1","side":"Universal","requiredOnClient":true,"requiredOnServer":true,"dependencies":{"game":"1.22.0"}}
+{
+  "type": "code",
+  "modid": "syntacticwizardry",
+  "name": "Syntactic Wizardry",
+  "authors": [
+    "Proxpero"
+  ],
+  "description": "Vintage Story spellcasting port: spatial Shapes.",
+  "version": "0.0.2",
+  "side": "Universal",
+  "requiredOnClient": true,
+  "requiredOnServer": true,
+  "dependencies": {
+    "game": "1.22.0"
+  },
+  "iconPath": "modicon.png",
+  "backgroundPaths": []
+}
