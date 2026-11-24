@@ -11,7 +11,7 @@ internal sealed class WorldAdapter(ICoreServerAPI api,IServerPlayer player):ISpe
  public ShapeResolution Root(){var p=Owner.ServerPos.XYZ.Add(Owner.LocalEyePos);var end=Owner.ServerPos.GetViewVector();return new(V(p),new Vector3(end.X,end.Y,end.Z),Vector3.UnitY,null,new HashSet<Voxel>(),null);}
  public bool IsLiving(long id)=>api.World.GetEntityById(id) is EntityAgent e&&e.Alive&&e.EntityId!=Owner.EntityId&&CanAttack(e);
  private bool CanAttack(Entity e)=>e is EntityPlayer?player.HasPrivilege("attackplayers")&&api.World.Config.GetBool("allowPvP",true):player.HasPrivilege("attackcreatures");
- public ShapeResolution? Trace(ShapeResolution parent,TargetMode mode,bool inward,double range,Func<long,bool> accepts){
+ public ShapeResolution? Trace(ShapeResolution parent,TargetMode mode,bool inward,double range,System.Func<long,bool> accepts){
   var p=parent.Origin;var d=Vector3.Normalize(parent.Forward);var start=new Vec3d(p.X,p.Y,p.Z);var end=new Vec3d(p.X+d.X*range,p.Y+d.Y*range,p.Z+d.Z*range);
   BlockSelection? block=null;EntitySelection? entity=null;
   api.World.RayTraceForSelection(start,end,ref block,ref entity,null,e=>mode!=TargetMode.Blocks&&e.EntityId!=Owner.EntityId&&accepts(e.EntityId));
