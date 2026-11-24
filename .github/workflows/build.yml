@@ -1,0 +1,38 @@
+name: Build Vintage Story mod
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VS_VERSION: '1.22.7'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download Vintage Story dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/vintagestory"
+          curl --fail --location --retry 3 "https://cdn.vintagestory.at/gamefiles/stable/vs_server_linux-x64_${VS_VERSION}.tar.gz" -o "$RUNNER_TEMP/vintagestory.tar.gz"
+          tar -xzf "$RUNNER_TEMP/vintagestory.tar.gz" -C "$RUNNER_TEMP/vintagestory"
+          api="$(find "$RUNNER_TEMP/vintagestory" -type f -name VintagestoryAPI.dll -print -quit)"
+          test -n "$api"
+          echo "VINTAGE_STORY=$(dirname "$api")" >> "$GITHUB_ENV"
+      - name: Run spell engine tests
+        run: dotnet run --project tests/CoreTests.csproj -c Release
+      - name: Compile and package
+        run: bash build.sh
+      - name: Upload installable mod
+        uses: actions/upload-artifact@v4
+        with:
+          name: vs_syntactic_wizardry_0.01-mod
+          path: dist/vs_syntactic_wizardry_0.01-mod.zip
+          if-no-files-found: error

@@ -1,0 +1,18 @@
+{
+  "code": "wand",
+  "class": "WizardryWand",
+  "maxstacksize": 1,
+  "texture": {
+    "base": "syntacticwizardry:item/wand"
+  },
+  "creativeinventory": {
+    "general": [
+      "*"
+    ],
+    "items": [
+      "*"
+    ]
+  },
+  "heldTpIdleAnimation": "holdbothhands",
+  "attributes": {}
+}

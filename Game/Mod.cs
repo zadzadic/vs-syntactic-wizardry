@@ -1,0 +1,32 @@
+using SyntacticWizardry.Core;
+using Vintagestory.API.Common;
+using Vintagestory.API.Client;
+using Vintagestory.API.Server;
+using Vintagestory.API.MathTools;
+namespace SyntacticWizardry.Game;
+public sealed class Settings {public float MaxMana {get;set;}=50;public float InitialMana {get;set;}=50;public float RegenPerSecond {get;set;}=0.25f;public int CooldownMs {get;set;}=1000;}
+public sealed class WizardryMod:ModSystem {
+ internal static readonly Registry Registry=new(); internal static readonly Engine Engine=new(Registry);
+ private const string Key="syntacticwizardry"; private ICoreServerAPI server=null!;private ICoreClientAPI client=null!;private IServerNetworkChannel snet=null!;private IClientNetworkChannel cnet=null!;private Settings config=new();private readonly Dictionary<string,long> nextCast=new();private readonly Dictionary<string,long> nextRequest=new();private Editor? editor;private bool openPending;private long tick;
+ public override void Start(ICoreAPI api){api.RegisterItemClass("WizardryWand",typeof(WizardryWand));}
+ public override void StartServerSide(ICoreServerAPI api){server=api;config=api.LoadModConfig<Settings>("syntacticwizardry.json")??new();config.MaxMana=float.IsFinite(config.MaxMana)?Math.Clamp(config.MaxMana,1,10000):50;config.InitialMana=float.IsFinite(config.InitialMana)?Math.Clamp(config.InitialMana,0,config.MaxMana):50;config.RegenPerSecond=float.IsFinite(config.RegenPerSecond)?Math.Clamp(config.RegenPerSecond,0,100):.25f;config.CooldownMs=Math.Clamp(config.CooldownMs,1000,60000);api.StoreModConfig(config,"syntacticwizardry.json");snet=api.Network.RegisterChannel(Key).RegisterMessageType<Request>().RegisterMessageType<State>().SetMessageHandler<Request>((p,r)=>api.Event.EnqueueMainThreadTask(()=>Handle(p,r),"sw-request"));api.Event.PlayerJoin+=Join;api.Event.PlayerDisconnect+=Disconnect;tick=api.Event.RegisterGameTickListener(Regen,1000);}
+ public override void StartClientSide(ICoreClientAPI api){client=api;cnet=api.Network.RegisterChannel(Key).RegisterMessageType<Request>().RegisterMessageType<State>().SetMessageHandler<State>(s=>api.Event.EnqueueMainThreadTask(()=>Receive(s),"sw-state"));api.Input.RegisterHotKey("sw-editor","Syntactic Wizardry: spell editor",GlKeys.J,HotkeyType.GUIOrOtherControls);api.Input.SetHotKeyHandler("sw-editor",_=>{if(editor?.IsOpened()==true){editor.TryClose();return true;}openPending=true;cnet.SendPacket(new Request{Action="load"});return true;});}
+ private void Join(IServerPlayer p){Ensure(p);}
+ private void Disconnect(IServerPlayer p){nextCast.Remove(p.PlayerUID);nextRequest.Remove(p.PlayerUID);}
+ private void Ensure(IServerPlayer p){var a=p.Entity.WatchedAttributes;if(!a.HasAttribute(Key+"mana")){a.SetFloat(Key+"mana",config.InitialMana);a.MarkPathDirty(Key+"mana");}}
+ private float Mana(IServerPlayer p){Ensure(p);return Math.Clamp(p.Entity.WatchedAttributes.GetFloat(Key+"mana"),0,config.MaxMana);}
+ private void SetMana(IServerPlayer p,float value){p.Entity.WatchedAttributes.SetFloat(Key+"mana",Math.Clamp(value,0,config.MaxMana));p.Entity.WatchedAttributes.MarkPathDirty(Key+"mana");}
+ private void Regen(float dt){foreach(var p in server.World.AllOnlinePlayers.OfType<IServerPlayer>())if(p.Entity.Alive)SetMana(p,Mana(p)+config.RegenPerSecond);}
+ private static ItemSlot Slot(IServerPlayer p)=>p.InventoryManager.ActiveHotbarSlot;
+ private static bool IsWand(ItemSlot s)=>s.Itemstack?.Collectible is WizardryWand;
+ private static long Rev(ItemSlot s)=>s.Itemstack?.Attributes.GetLong(Key+"revision")??0;
+ private static string Read(ItemSlot s)=>s.Itemstack?.Attributes.GetString(Key+"spell")??"";
+ private void Reply(IServerPlayer p,string message){var slot=Slot(p);snet.SendPacket(new State{SpellJson=IsWand(slot)?Read(slot):"",Revision=IsWand(slot)?Rev(slot):0,Mana=Mana(p),MaxMana=config.MaxMana,Message=message},p);}
+ private void Handle(IServerPlayer p,Request r){if(p.Entity==null||!p.Entity.Alive)return;long now=server.World.ElapsedMilliseconds;if(nextRequest.GetValueOrDefault(p.PlayerUID)>now)return;nextRequest[p.PlayerUID]=now+150;var slot=Slot(p);if(!IsWand(slot)){Reply(p,"Hold a Wizardry Wand first.");return;}if(r.Action=="load"){Reply(p,"Editor loaded.");return;}if(r.Action!="save")return;if(r.Revision!=Rev(slot)){Reply(p,"Wand changed; reopen editor.");return;}try{var spell=Engine.Decode(r.SpellJson);slot.Itemstack!.Attributes.SetString(Key+"spell",Engine.Encode(spell));slot.Itemstack.Attributes.SetLong(Key+"revision",Rev(slot)+1);slot.MarkDirty();Reply(p,"Written spell saved to wand.");}catch(Exception ex) when(ex is FormatException or System.Text.Json.JsonException){Reply(p,"Invalid spell: "+ex.Message);}}
+ public void Cast(IServerPlayer p,ItemSlot slot){if(!p.Entity.Alive||!IsWand(slot)||slot!=Slot(p))return;long now=server.World.ElapsedMilliseconds;if(nextCast.GetValueOrDefault(p.PlayerUID)>now)return;Spell spell;try{spell=Engine.Decode(Read(slot));}catch(Exception ex) when(ex is FormatException or System.Text.Json.JsonException){Reply(p,"No valid spell. Press J to create one.");return;}float cost=Engine.Cost(spell,.75f);if(Mana(p)<cost){Reply(p,$"Not enough Mana: need {cost:0.##}.");return;}nextCast[p.PlayerUID]=now+config.CooldownMs;SetMana(p,Mana(p)-cost);var world=new WorldAdapter(server,p);int hits=Engine.Execute(world,spell,world.Root());server.World.PlaySoundAt(new AssetLocation("game:sounds/effect/collect"),p.Entity,null,false,16,0.6f);Reply(p,$"{spell.Name}: {hits} hit(s), {cost:0.##} Mana.");}
+ private void Receive(State s){client.ShowChatMessage($"[Wizardry] {s.Message} Mana {s.Mana:0.##}/{s.MaxMana:0.##}");if(openPending){openPending=false;if(s.Message!="Editor loaded.")return;editor?.Dispose();editor=new Editor(client,s,r=>cnet.SendPacket(r));editor.TryOpen();}else if(editor?.IsOpened()==true)editor.Update(s);}
+ public override void Dispose(){if(server!=null){server.Event.PlayerJoin-=Join;server.Event.PlayerDisconnect-=Disconnect;server.Event.UnregisterGameTickListener(tick);}editor?.Dispose();base.Dispose();}
+}
+public sealed class WizardryWand:Item {
+ public override void OnHeldInteractStart(ItemSlot slot,EntityAgent byEntity,BlockSelection blockSel,EntitySelection entitySel,bool firstEvent,ref EnumHandHandling handHandling){handHandling=EnumHandHandling.PreventDefault;if(firstEvent&&byEntity.World.Side==EnumAppSide.Server&&byEntity is EntityPlayer ep&&ep.Player is IServerPlayer p)api.ModLoader.GetModSystem<WizardryMod>().Cast(p,slot);}
+}
